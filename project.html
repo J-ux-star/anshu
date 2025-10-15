@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cloud Based Calculator</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --accent:#06b6d4;
+      --muted:#94a3b8;
+      --glass: rgba(255,255,255,0.03);
+    }
+    *{box-sizing:border-box;font-family:Inter,Segoe UI,system-ui,Arial;}
+    body{margin:0;background:linear-gradient(180deg,#061226 0%, #0b1b2b 100%);color:#e6eef6;display:flex;align-items:center;justify-content:center;height:100vh;padding:20px;}
+    .wrap{width:100%;max-width:420px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));border-radius:14px;padding:18px;box-shadow: 0 10px 30px rgba(2,6,23,0.6);}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    header h1{font-size:18px;margin:0}
+    header small{color:var(--muted);font-size:12px}
+    .display{
+      background:var(--card);border-radius:10px;padding:12px;margin-bottom:12px;min-height:82px;display:flex;flex-direction:column;justify-content:space-between;
+      box-shadow: inset 0 -1px 0 rgba(255,255,255,0.02);
+    }
+    #historySmall{font-size:11px;color:var(--muted);max-height:36px;overflow:auto}
+    #output{font-size:24px;font-weight:600;text-align:right;word-break:break-all}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    button.key{
+      padding:14px;border-radius:8px;background:var(--glass);border:1px solid rgba(255,255,255,0.03);color:inherit;font-size:16px;cursor:pointer;
+      transition:transform .08s ease, box-shadow .08s;
+    }
+    button.key:active{transform:translateY(1px)}
+    .op{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));}
+    .wide{grid-column:span 2}
+    .accent{background:linear-gradient(180deg,var(--accent), #0493a0);color:#04141a;font-weight:700}
+    .footer{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:12px;font-size:12px;color:var(--muted)}
+    .small-btn{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:6px 8px;border-radius:8px;color:var(--muted);cursor:pointer}
+    @media (max-width:420px){
+      body{padding:12px}
+      .wrap{padding:12px}
+      .display{min-height:70px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" role="application" aria-label="Cloud Based Calculator">
+    <header>
+      <div>
+        <h1>Cloud Based Calculator</h1>
+        <small>Rachit, Pankaj, Durgesh, Vedant</small>
+      </div>
+      <div style="text-align:right">
+        <small id="status">Offline (local)</small>
+      </div>
+    </header>
+
+    <div class="display" aria-live="polite">
+      <div id="historySmall"></div>
+      <div id="output">0</div>
+    </div>
+
+    <div class="grid">
+      <button class="key" data-action="clear">C</button>
+      <button class="key" data-action="paren">()</button>
+      <button class="key" data-action="back">⌫</button>
+      <button class="key op" data-value="/">÷</button>
+
+      <button class="key" data-value="7">7</button>
+      <button class="key" data-value="8">8</button>
+      <button class="key" data-value="9">9</button>
+      <button class="key op" data-value="*">×</button>
+
+      <button class="key" data-value="4">4</button>
+      <button class="key" data-value="5">5</button>
+      <button class="key" data-value="6">6</button>
+      <button class="key op" data-value="-">−</button>
+
+      <button class="key" data-value="1">1</button>
+      <button class="key" data-value="2">2</button>
+      <button class="key" data-value="3">3</button>
+      <button class="key op" data-value="+">+</button>
+
+      <button class="key" data-action="mem-plus">M+</button>
+      <button class="key" data-value="0">0</button>
+      <button class="key" data-value=".">.</button>
+      <button class="key accent" data-action="equals" style="font-size:18px">=</button>
+
+      <button class="key wide" data-action="sin">sin</button>
+      <button class="key" data-action="cos">cos</button>
+      <button class="key" data-action="tan">tan</button>
+
+      <button class="key" data-action="ln">ln</button>
+      <button class="key" data-action="log">log</button>
+      <button class="key" data-action="sqrt">√</button>
+      <button class="key" data-action="pow">^</button>
+    </div>
+
+    <div class="footer">
+      <div style="display:flex;gap:6px">
+        <button class="small-btn" id="clearHistory">Clear History</button>
+        <button class="small-btn" id="exportHistory">Export</button>
+      </div>
+      <div>
+        <button class="small-btn" id="toggleCloud">Enable Cloud</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    // Basic expression handling with safe parsing (we'll use Function in controlled manner).
+    // Keep internal expression in JS-compatible form where × -> * and ÷ -> /
+    const out = document.getElementById('output');
+    const histSmall = document.getElementById('historySmall');
+    const status = document.getElementById('status');
+    let expr = '';
+    let memory = 0;
+    let lastResult = null;
+    let history = JSON.parse(localStorage.getItem('cbc_history')||'[]');
+    let cloudEnabled = false; // placeholder, toggled by UI
+
+    function render(){
+      out.textContent = expr || '0';
+      renderHistorySmall();
+    }
+    function renderHistorySmall(){
+      histSmall.innerHTML = history.slice(-3).map(h => {
+        const t = new Date(h.t).toLocaleTimeString();
+        return `<div style="font-size:11px;color:var(--muted)">${h.expr} = ${h.res} <span style="color:var(--muted);font-size:10px">(${t})</span></div>`;
+      }).join('');
+    }
+
+    function pushHistory(equ, res){
+      const item = {expr:equ, res:res, t: Date.now()};
+      history.push(item);
+      // keep last 200
+      if(history.length>200) history.shift();
+      localStorage.setItem('cbc_history', JSON.stringify(history));
+      // if cloudEnabled then call pushToCloud(item) <-- placeholder
+    }
+
+    function safeEval(jsExpr){
+      // Disallow letters except in allowed function names and Math.* usage - simple guard
+      // We'll map functions to Math equivalents
+      try {
+        // map pow operator '^' -> Math.pow
+        let s = jsExpr.replace(/\^/g, '**');
+        // replace scientific function names to Math.fn
+        s = s.replace(/\b(sin|cos|tan|ln|log|sqrt)\b/g, function(m){
+          switch(m){
+            case 'ln': return 'Math.log';
+            case 'log': return 'Math.log10?Math.log10:Math.log'; // fallback
+            case 'sqrt': return 'Math.sqrt';
+            case 'sin':
+            case 'cos':
+            case 'tan':
+              return 'Math.'+m;
+          }
+          return m;
+        });
+        // provide polyfill for Math.log10 if not present
+        if(!Math.log10) Math.log10 = function(x){ return Math.log(x)/Math.LN10; };
+        // final check: disallow letters except Math and allowed punctuation
+        if(/[a-zA-Z]/.test(s) && !/Math\./.test(s)){
+          throw new Error('Invalid input');
+        }
+        // Use Function to evaluate with Math in scope
+        const fn = new Function('Math','return ('+s+');');
+        const r = fn(Math);
+        if(!isFinite(r)) throw new Error('Math error');
+        return r;
+      } catch(e){
+        throw e;
+      }
+    }
+
+    function onKey(k){
+      if(k === 'equals'){
+        if(!expr) return;
+        try {
+          const res = safeEval(expr);
+          lastResult = res;
+          pushHistory(expr, res);
+          expr = String(res);
+          render();
+        } catch(e){
+          expr = 'ERR';
+          render();
+          setTimeout(()=>{ expr=''; render(); }, 900);
+        }
+      } else if(k === 'clear'){
+        expr = '';
+        render();
+      } else if(k === 'back'){
+        expr = expr.slice(0,-1);
+        render();
+      } else if(k === 'paren'){
+        // toggle insert parentheses smartly: if open parens > close, add ')', else '('
+        const open = (expr.match(/\(/g)||[]).length;
+        const close = (expr.match(/\)/g)||[]).length;
+        expr += (open>close)?')':'(';
+        render();
+      } else if(k === 'mem-plus'){
+        if(lastResult!==null) memory += Number(lastResult);
+        else {
+          try { memory += Number(safeEval(expr)); } catch(e){}
+        }
+      } else if(k === 'sin' || k === 'cos' || k === 'tan' || k === 'ln' || k === 'log' || k === 'sqrt' || k === 'pow'){
+        // apply function to current expression or last result
+        if(k === 'pow'){
+          expr = `(${expr||'1'})^2`;
+        } else {
+          const map = {sin:'sin', cos:'cos', tan:'tan', ln:'ln', log:'log', sqrt:'sqrt'};
+          expr = `${map[k]}(${expr||'0'})`;
+        }
+        render();
+      } else {
+        // numeric or operator
+        expr += k;
+        render();
+      }
+    }
+
+    // attach event handlers
+    document.querySelectorAll('button.key').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const a = b.dataset.action;
+        const v = b.dataset.value;
+        if(a) onKey(a);
+        else if(v) onKey(v);
+      });
+    });
+
+    document.getElementById('clearHistory').addEventListener('click', ()=>{
+      history = [];
+      localStorage.removeItem('cbc_history');
+      render();
+    });
+
+    document.getElementById('exportHistory').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(history, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'cbc_history.json'; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('toggleCloud').addEventListener('click', ()=>{
+      cloudEnabled = !cloudEnabled;
+      status.textContent = cloudEnabled ? 'Cloud: Enabled (placeholder)' : 'Offline (local)';
+      // NOTE: here you can initialize cloud SDK (e.g., Firebase) and call sync functions
+      if(cloudEnabled){
+        alert('Cloud sync enabled (placeholder). To actually sync, integrate your cloud API (see comments).');
+      }
+    });
+
+    // keyboard support
+    window.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') { onKey('equals'); e.preventDefault(); return; }
+      if(e.key === 'Backspace'){ onKey('back'); return; }
+      if(e.key === 'Escape'){ onKey('clear'); return; }
+      const allowed = '0123456789+-*/().^';
+      if(allowed.includes(e.key)) { onKey(e.key); return; }
+    });
+
+    // initial render
+    render();
+
+    /***** CLOUD INTEGRATION - PLACEHOLDER *****
+    To enable cloud persistence (example: Firebase Firestore):
+    1) Create Firebase project, enable Firestore.
+    2) Add Firebase SDK scripts and initialize with your config here.
+    3) Implement functions:
+       async function pushToCloud(item){ await firestore.collection('calculations').add(item); }
+       async function loadFromCloud(){ const q = await firestore.collection('calculations').get(); ... }
+    4) On toggleCloud true -> call loadFromCloud() to merge remote history with local.
+    ********************************************/
+
+  })();
+  </script>
+</body>
+</html>
